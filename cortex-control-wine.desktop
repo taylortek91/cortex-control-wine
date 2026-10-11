@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Cortex Control (Wine)
+Comment=Control a Neural DSP Quad Cortex
+Exec=cortex-control
+Icon=audio-card
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+StartupNotify=false

@@ -1,0 +1,4 @@
+# Grant the active local user access to Neural DSP's QC/QC mini HID interface.
+# Keep this before systemd's 71-seat/73-seat-late rules so uaccess is applied.
+SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="152a", ATTRS{idProduct}=="880a", TAG+="uaccess"
+SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="152a", ATTRS{idProduct}=="892f", TAG+="uaccess"

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly WINE_ROOT="${CORTEX_CONTROL_WINE_ROOT:-/opt/wine-d2d1}"
+readonly WINE="$WINE_ROOT/bin/wine"
+readonly DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+readonly PREFIX="${CORTEX_CONTROL_PREFIX:-$DATA_HOME/cortex-control-wine/prefix}"
+readonly APP="$PREFIX/drive_c/Program Files/Neural DSP/Cortex Control/Cortex Control.exe"
+
+if [[ ! -x "$WINE" ]]; then
+  echo "Patched Wine was not found at $WINE_ROOT. Reinstall $0's package." >&2
+  exit 1
+fi
+
+if [[ ! -f "$APP" ]]; then
+  cat >&2 <<EOF
+Cortex Control is not installed in this user's Wine prefix.
+Download the official Windows installer from https://neuraldsp.com/downloads,
+then run:
+  cortex-control-setup /path/to/Cortex-Control-installer.exe
+EOF
+  exit 1
+fi
+
+export WINEPREFIX="$PREFIX"
+export WINELOADER="$WINE"
+export WINESERVER="$WINE_ROOT/bin/wineserver"
+export WINEDLLPATH="$WINE_ROOT/lib/wine"
+export WINEDEBUG="${WINEDEBUG:--all}"
+
+exec "$WINE" "$APP" "$@"

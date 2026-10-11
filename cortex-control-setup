@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly WINE_ROOT="${CORTEX_CONTROL_WINE_ROOT:-/opt/wine-d2d1}"
+readonly WINE="$WINE_ROOT/bin/wine"
+readonly WINEBOOT="$WINE_ROOT/bin/wineboot"
+readonly DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+readonly PREFIX="${CORTEX_CONTROL_PREFIX:-$DATA_HOME/cortex-control-wine/prefix}"
+readonly WEBVIEW2_BOOTSTRAPPER='https://go.microsoft.com/fwlink/p/?LinkId=2124703'
+
+if (( EUID == 0 )); then
+  echo 'Do not run this setup as root; Cortex Control belongs in your user prefix.' >&2
+  exit 1
+fi
+
+if (( $# != 1 )) || [[ ! -f "$1" ]]; then
+  cat >&2 <<EOF
+Usage: cortex-control-setup /path/to/Cortex-Control-installer.exe
+
+Download the official Windows installer from https://neuraldsp.com/downloads
+first. The installer is proprietary and is not bundled with this package.
+EOF
+  exit 2
+fi
+
+if [[ ! -x "$WINE" || ! -x "$WINEBOOT" ]]; then
+  echo "Patched Wine was not found at $WINE_ROOT." >&2
+  exit 1
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo 'curl is required to install the Microsoft WebView2 runtime.' >&2
+  exit 1
+fi
+
+installer="$(realpath -- "$1")"
+mkdir -p "$PREFIX"
+
+export WINEPREFIX="$PREFIX"
+export WINELOADER="$WINE"
+export WINESERVER="$WINE_ROOT/bin/wineserver"
+export WINEDLLPATH="$WINE_ROOT/lib/wine"
+export WINEDEBUG="${WINEDEBUG:--all}"
+
+if [[ ! -f "$WINEPREFIX/system.reg" ]]; then
+  export WINEARCH=win64
+fi
+
+"$WINEBOOT" -u
+
+shopt -s nullglob
+webview2_runtimes=(
+  "$WINEPREFIX/drive_c/Program Files (x86)/Microsoft/EdgeWebView/Application/"*/msedgewebview2.exe
+)
+
+if (( ${#webview2_runtimes[@]} == 0 )); then
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf -- "$temp_dir"' EXIT
+  bootstrapper="$temp_dir/MicrosoftEdgeWebView2Setup.exe"
+
+  echo 'Downloading the Microsoft WebView2 Evergreen bootstrapper...'
+  curl --fail --location --retry 2 --output "$bootstrapper" "$WEBVIEW2_BOOTSTRAPPER"
+  echo 'Installing WebView2 into this Wine prefix...'
+  "$WINE" "$bootstrapper" /silent /install
+fi
+
+# The WebView2 runtime has a Wine-specific compatibility workaround used by
+# current Winetricks. Keep it scoped to this prefix and executable.
+"$WINE" reg add 'HKCU\Software\Wine\AppDefaults\msedgewebview2.exe' \
+  /v Version /t REG_SZ /d win7 /f >/dev/null
+
+echo 'Launching the official Cortex Control installer. Complete its dialogs to finish setup.'
+"$WINE" "$installer"
+
+echo 'Setup finished. Launch Cortex Control with: cortex-control'

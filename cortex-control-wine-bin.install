@@ -1,0 +1,26 @@
+_reload_cortex_udev() {
+  command -v udevadm >/dev/null 2>&1 || return 0
+  udevadm control --reload-rules || true
+  udevadm trigger --action=change --subsystem-match=hidraw \
+    --property-match=ID_VENDOR_ID=152a --property-match=ID_MODEL_ID=880a || true
+  udevadm trigger --action=change --subsystem-match=hidraw \
+    --property-match=ID_VENDOR_ID=152a --property-match=ID_MODEL_ID=892f || true
+}
+
+post_install() {
+  _reload_cortex_udev
+  cat <<'EOF'
+
+Cortex Control Wine setup:
+  1. The targeted HID access rules have been reloaded.
+  2. Download Neural DSP's official Windows installer.
+  3. Run: cortex-control-setup /path/to/Cortex-Control-installer.exe
+  4. Launch with: cortex-control
+
+This package does not include or redistribute Cortex Control itself.
+EOF
+}
+
+post_upgrade() {
+  _reload_cortex_udev
+}
