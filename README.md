@@ -13,7 +13,7 @@ unofficial and future Wine, Cortex Control, or CorOS updates may need retesting.
 
 If this package is useful, consider supporting its maintenance:
 
-[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/tlrtek)
+<a href="https://www.buymeacoffee.com/tlrtek"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="160"></a>
 
 ## Build and install
 
