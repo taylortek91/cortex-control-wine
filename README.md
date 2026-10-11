@@ -69,6 +69,10 @@ while keeping the package and prefix; back up important data first. Use
 settings, backups, WebView2, and any other Windows apps in that prefix, and
 requires typing `PURGE` to confirm.
 
+## Support this project
+
+If this package is useful, you can [buy me a coffee](https://www.buymeacoffee.com/tlrtek) ☕.
+
 ## Notes
 
 - The HID permission rules match only Neural DSP USB IDs `152a:880a` (Quad
