@@ -9,6 +9,12 @@ and Cortex Control 4.1.0. The QC's USB-HID interface was accessible through
 Wine, and the patched Wine rendered Cortex Control's Grid. The patch is
 unofficial and future Wine, Cortex Control, or CorOS updates may need retesting.
 
+## Support this project
+
+If this package is useful, consider supporting its maintenance:
+
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/tlrtek)
+
 ## Build and install
 
 Install the usual Arch build tools (`base-devel`), then build this directory:
@@ -68,10 +74,6 @@ while keeping the package and prefix; back up important data first. Use
 `--purge-prefix` to remove both the package and the entire prefix; this deletes
 settings, backups, WebView2, and any other Windows apps in that prefix, and
 requires typing `PURGE` to confirm.
-
-## Support this project
-
-If this package is useful, you can [buy me a coffee](https://www.buymeacoffee.com/tlrtek) ☕.
 
 ## Notes
 
