@@ -6,6 +6,8 @@ readonly WINE="$WINE_ROOT/bin/wine"
 readonly DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 readonly PREFIX="${CORTEX_CONTROL_PREFIX:-$DATA_HOME/cortex-control-wine/prefix}"
 readonly APP="$PREFIX/drive_c/Program Files/Neural DSP/Cortex Control/Cortex Control.exe"
+readonly CLOUD_CHECK_URL='https://cloud.neuraldsp.com/'
+readonly POWERSHELL_SHIM_WINEPATH='Z:\usr\share\cortex-control-wine\powershell-shim'
 
 if [[ ! -x "$WINE" ]]; then
   echo "Patched Wine was not found at $WINE_ROOT. Reinstall $0's package." >&2
@@ -27,5 +29,16 @@ export WINELOADER="$WINE"
 export WINESERVER="$WINE_ROOT/bin/wineserver"
 export WINEDLLPATH="$WINE_ROOT/lib/wine"
 export WINEDEBUG="${WINEDEBUG:--all}"
+export WINEPATH="$POWERSHELL_SHIM_WINEPATH${WINEPATH:+;$WINEPATH}"
+
+# Cortex Control shells out to Get-NetAdapter for its online indicator. Wine's
+# bundled PowerShell is only a stub, so provide a host-side reachability result
+# for the scoped batch shim shipped with this package.
+export CORTEX_CONTROL_HOST_ONLINE=0
+if command -v curl >/dev/null 2>&1 && \
+  curl --location --fail --silent --show-error --head \
+    --connect-timeout 2 --max-time 5 "$CLOUD_CHECK_URL" >/dev/null 2>&1; then
+  export CORTEX_CONTROL_HOST_ONLINE=1
+fi
 
 exec "$WINE" "$APP" "$@"

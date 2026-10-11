@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly PACKAGE='cortex-control-wine-bin'
+readonly WINE_ROOT="${CORTEX_CONTROL_WINE_ROOT:-/opt/wine-d2d1}"
+readonly WINE="$WINE_ROOT/bin/wine"
+readonly DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+readonly PREFIX="${CORTEX_CONTROL_PREFIX:-$DATA_HOME/cortex-control-wine/prefix}"
+readonly APP="$PREFIX/drive_c/Program Files/Neural DSP/Cortex Control/Cortex Control.exe"
+
+usage() {
+  cat <<EOF
+Usage: cortex-control-uninstall [OPTION]
+
+Safely uninstall the Arch package, Cortex Control from Wine, or the whole prefix.
+
+  --package-only  Remove the Arch package only (default); preserve the prefix.
+  --app-only      Run Cortex Control's registered MSI uninstaller; leave the
+                  Wine package and prefix in place. Back up important data first.
+  --purge-prefix  Remove the Arch package and the entire per-user Wine prefix,
+                  including all apps, settings, and backups. Requires typing
+                  PURGE to confirm.
+  -h, --help      Show this help.
+
+Run as your normal user. Package removal uses sudo; the Wine prefix is never
+removed unless --purge-prefix is selected and confirmed.
+EOF
+}
+
+die() {
+  printf 'cortex-control-uninstall: %s\n' "$*" >&2
+  exit 1
+}
+
+if (( $# > 1 )); then
+  usage >&2
+  exit 2
+fi
+
+mode='package'
+case "${1:-}" in
+  ''|--package-only) mode='package' ;;
+  --app-only) mode='app' ;;
+  --purge-prefix) mode='purge' ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+if (( EUID == 0 )); then
+  die 'run this command as your normal user; it will use sudo for pacman.'
+fi
+
+if command -v pgrep >/dev/null 2>&1 && pgrep -f '[C]ortex Control[.]exe' >/dev/null 2>&1; then
+  die 'Cortex Control appears to be running. Close it before uninstalling.'
+fi
+
+remove_package() {
+  command -v pacman >/dev/null 2>&1 || die 'pacman was not found.'
+
+  if ! pacman -Qq "$PACKAGE" >/dev/null 2>&1; then
+    printf '%s is not installed; skipping package removal.\n' "$PACKAGE"
+    return 0
+  fi
+
+  command -v sudo >/dev/null 2>&1 || die 'sudo was not found; remove the package with pacman as root.'
+  sudo pacman -R "$PACKAGE"
+}
+
+require_prefix() {
+  [[ -f "$PREFIX/system.reg" && -d "$PREFIX/drive_c" ]] ||
+    die "Wine prefix not found at: $PREFIX"
+}
+
+require_wine() {
+  [[ -x "$WINE" ]] || die "patched Wine not found at: $WINE_ROOT"
+}
+
+uninstall_app() {
+  require_prefix
+  require_wine
+  [[ -f "$APP" ]] || {
+    printf 'Cortex Control is not installed in %s.\n' "$PREFIX"
+    return 0
+  }
+
+  export WINEPREFIX="$PREFIX"
+  export WINELOADER="$WINE"
+  export WINESERVER="$WINE_ROOT/bin/wineserver"
+  export WINEDLLPATH="$WINE_ROOT/lib/wine"
+  export WINEDEBUG="${WINEDEBUG:--all}"
+
+  local uninstall_key=''
+  local registry_root
+  for registry_root in \
+    'HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall' \
+    'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall' \
+    'HKLM\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall' \
+    'HKCU\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall'; do
+    uninstall_key="$(
+      "$WINE" reg query "$registry_root" /s /v DisplayName 2>/dev/null |
+        awk '
+          /^HKEY_/ { key=$0; sub(/\r$/, "", key) }
+          tolower($0) ~ /^[[:space:]]*displayname[[:space:]]+reg_sz[[:space:]]+cortex control[[:space:]]*$/ {
+            print key
+            exit
+          }
+        ' || true
+    )"
+    [[ -n "$uninstall_key" ]] && break
+  done
+
+  [[ -n "$uninstall_key" ]] ||
+    die 'Cortex Control was found, but its Windows Installer uninstall entry was not.'
+
+  local product_code="${uninstall_key##*Uninstall}"
+  product_code="${product_code#?}"
+  if (( ${#product_code} != 38 )) ||
+    [[ "${product_code:0:1}" != '{' || "${product_code: -1}" != '}' ]]; then
+    die "could not parse the MSI product code from: $uninstall_key"
+  fi
+
+  printf 'Launching the Cortex Control MSI uninstaller for %s.\n' "$product_code"
+  "$WINE" msiexec.exe /x "$product_code"
+  printf 'The Cortex Control application was uninstalled. The Wine prefix and user data were retained.\n'
+}
+
+purge_prefix() {
+  local prefix_to_delete=''
+  if [[ -e "$PREFIX" ]]; then
+    [[ ! -L "$PREFIX" ]] || die 'refusing to purge a symlinked prefix; set CORTEX_CONTROL_PREFIX to its real path.'
+    prefix_to_delete="$(realpath -e -- "$PREFIX")" || die "could not resolve prefix path: $PREFIX"
+
+    local home_real data_home_real owner
+    home_real="$(realpath -m -- "$HOME")"
+    data_home_real="$(realpath -m -- "$DATA_HOME")"
+    [[ "$prefix_to_delete" != '/' && "$prefix_to_delete" != "$home_real" && "$prefix_to_delete" != "$data_home_real" ]] ||
+      die "refusing to purge an unsafe path: $prefix_to_delete"
+    [[ -f "$prefix_to_delete/system.reg" && -d "$prefix_to_delete/drive_c" ]] ||
+      die "refusing to purge a directory that does not look like a Wine prefix: $prefix_to_delete"
+
+    owner="$(stat -c '%u' -- "$prefix_to_delete")"
+    [[ "$owner" == "$EUID" ]] || die "prefix is not owned by this user: $prefix_to_delete"
+
+    [[ -t 0 ]] || die 'prefix purge requires an interactive terminal for confirmation.'
+    printf 'This permanently deletes the entire Wine prefix, including Cortex Control, WebView2, settings, and backups:\n  %s\nType PURGE to continue: ' "$prefix_to_delete" >&2
+    local confirmation=''
+    IFS= read -r confirmation || die 'confirmation was not received.'
+    [[ "$confirmation" == 'PURGE' ]] || die 'purge cancelled.'
+  else
+    printf 'Wine prefix not found at %s; nothing to purge.\n' "$PREFIX"
+  fi
+
+  remove_package
+
+  if [[ -n "$prefix_to_delete" ]]; then
+    rm -rf -- "$prefix_to_delete"
+    printf 'Removed Wine prefix: %s\n' "$prefix_to_delete"
+  fi
+}
+
+case "$mode" in
+  package)
+    remove_package
+    printf 'The Wine prefix and Cortex Control user data were preserved.\n'
+    ;;
+  app)
+    uninstall_app
+    ;;
+  purge)
+    purge_prefix
+    ;;
+esac
